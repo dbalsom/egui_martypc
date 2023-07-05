@@ -258,14 +258,14 @@ impl State {
                     },
                 ..
             } => {
-                let is_mac_cmd = cfg!(target_os = "macos")
-                    && (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
+                // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
+                let is_cmd = (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
 
                 let mut consumed = false;
 
                 // Only send key-down events to egui
                 if let ElementState::Pressed = state {
-                    consumed = if is_printable_key(key_str) && !is_mac_cmd {
+                    consumed = if is_printable_key(key_str) && !is_cmd {
                         self.egui_input
                             .events
                             .push(egui::Event::Text(key_str.to_string()));
@@ -305,6 +305,7 @@ impl State {
                 // on Mac even Cmd-C is pressed during ime, a `c` is pushed to Preedit.
                 // So no need to check is_mac_cmd.
                 //
+
                 // How winit produce `Ime::Enabled` and `Ime::Disabled` differs in MacOS
                 // and Windows.
                 //
