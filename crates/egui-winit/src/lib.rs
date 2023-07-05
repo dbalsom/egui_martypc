@@ -248,6 +248,31 @@ impl State {
                     consumed,
                 }
             }
+            WindowEvent::KeyboardInput {
+                event:
+                    winit::event::KeyEvent {
+                        logical_key: winit::keyboard::Key::Character(key_str),
+                        state,
+                        ..
+                    },
+                ..
+            } => {
+                let is_mac_cmd = cfg!(target_os = "macos")
+                    && (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
+
+                let consumed = if is_printable_key(key_str) && !is_mac_cmd {
+                    self.egui_input
+                        .events
+                        .push(egui::Event::Text(key_str.to_string()));
+                    egui_ctx.wants_keyboard_input()
+                } else {
+                    false
+                };
+                EventResponse {
+                    repaint: true,
+                    consumed,
+                }
+            }
             /*
             WindowEvent::ReceivedCharacter(ch) => {
                 // On Mac we get here when the user presses Cmd-C (copy), ctrl-W, etc.
@@ -742,6 +767,22 @@ fn is_printable_char(chr: char) -> bool {
         || '\u{100000}' <= chr && chr <= '\u{10fffd}';
 
     !is_in_private_use_area && !chr.is_ascii_control()
+}
+
+/// Winit 0.29 sends keys as 'str'. Read the first character out of the string
+/// This may not be the proper way to handle it...
+fn is_printable_key(key: &str) -> bool {
+    let chr_opt: char = key.chars().next();
+
+    if let Some(chr) = chr_opt {
+        let is_in_private_use_area = '\u{e000}' <= chr && chr <= '\u{f8ff}'
+            || '\u{f0000}' <= chr && chr <= '\u{ffffd}'
+            || '\u{100000}' <= chr && chr <= '\u{10fffd}';
+
+        !is_in_private_use_area && !chr.is_ascii_control()
+    } else {
+        false
+    }
 }
 
 fn is_cut_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
