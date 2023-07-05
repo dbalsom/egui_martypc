@@ -772,7 +772,7 @@ fn is_printable_char(chr: char) -> bool {
 /// Winit 0.29 sends keys as 'str'. Read the first character out of the string
 /// This may not be the proper way to handle it...
 fn is_printable_key(key: &str) -> bool {
-    let chr_opt: char = key.chars().next();
+    let chr_opt = key.chars().next();
 
     if let Some(chr) = chr_opt {
         let is_in_private_use_area = '\u{e000}' <= chr && chr <= '\u{f8ff}'
