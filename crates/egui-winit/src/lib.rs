@@ -194,6 +194,7 @@ impl State {
         egui_ctx: &egui::Context,
         event: &winit::event::WindowEvent<'_>,
     ) -> EventResponse {
+        use winit::event::ElementState;
         use winit::event::WindowEvent;
         match event {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -260,14 +261,20 @@ impl State {
                 let is_mac_cmd = cfg!(target_os = "macos")
                     && (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
 
-                let consumed = if is_printable_key(key_str) && !is_mac_cmd {
-                    self.egui_input
-                        .events
-                        .push(egui::Event::Text(key_str.to_string()));
-                    egui_ctx.wants_keyboard_input()
-                } else {
-                    false
-                };
+                let mut consumed = false;
+
+                // Only send key-down events to egui
+                if let ElementState::Pressed = state {
+                    consumed = if is_printable_key(key_str) && !is_mac_cmd {
+                        self.egui_input
+                            .events
+                            .push(egui::Event::Text(key_str.to_string()));
+                        egui_ctx.wants_keyboard_input()
+                    } else {
+                        false
+                    };
+                }
+
                 EventResponse {
                     repaint: true,
                     consumed,
