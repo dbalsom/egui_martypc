@@ -657,6 +657,7 @@ impl State {
             if is_cut_command(self.egui_input.modifiers, input.physical_key) {
                 self.egui_input.events.push(egui::Event::Cut);
             } else if is_copy_command(self.egui_input.modifiers, input.physical_key) {
+                log::warn!("Got copy command!");
                 self.egui_input.events.push(egui::Event::Copy);
             } else if is_paste_command(self.egui_input.modifiers, input.physical_key) {
                 if let Some(contents) = self.clipboard.get() {
