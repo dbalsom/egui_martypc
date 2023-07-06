@@ -407,6 +407,14 @@ impl State {
                 } else {
                     state.control_key()
                 };
+
+                log::warn!(
+                    "modifiers: alt: {} ctrl: {} shift: {}",
+                    self.egui_input.modifiers.alt,
+                    self.egui_input.modifiers.ctrl,
+                    self.egui_input.modifiers.shift
+                );
+
                 EventResponse {
                     repaint: true,
                     consumed: false,
