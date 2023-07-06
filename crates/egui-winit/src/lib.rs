@@ -657,7 +657,6 @@ impl State {
             if is_cut_command(self.egui_input.modifiers, input.physical_key) {
                 self.egui_input.events.push(egui::Event::Cut);
             } else if is_copy_command(self.egui_input.modifiers, input.physical_key) {
-                log::warn!("Got copy command!");
                 self.egui_input.events.push(egui::Event::Copy);
             } else if is_paste_command(self.egui_input.modifiers, input.physical_key) {
                 if let Some(contents) = self.clipboard.get() {
@@ -809,6 +808,7 @@ fn is_copy_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode
 }
 
 fn is_paste_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
+    log::warn!("In copy command!");
     (modifiers.command && keycode == winit::keyboard::KeyCode::KeyV)
         || (cfg!(target_os = "windows")
             && modifiers.shift
