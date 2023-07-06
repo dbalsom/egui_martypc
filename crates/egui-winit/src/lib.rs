@@ -801,6 +801,11 @@ fn is_cut_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode)
 }
 
 fn is_copy_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
+    log::warn!(
+        "In copy command, command modified: {} keycode: {:?}",
+        modifiers.command,
+        keycode
+    );
     (modifiers.command && keycode == winit::keyboard::KeyCode::KeyC)
         || (cfg!(target_os = "windows")
             && modifiers.ctrl
@@ -808,7 +813,6 @@ fn is_copy_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode
 }
 
 fn is_paste_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
-    log::warn!("In copy command!");
     (modifiers.command && keycode == winit::keyboard::KeyCode::KeyV)
         || (cfg!(target_os = "windows")
             && modifiers.shift
