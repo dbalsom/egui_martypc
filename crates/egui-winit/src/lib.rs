@@ -258,6 +258,8 @@ impl State {
                     },
                 ..
             } => {
+                self.on_keyboard_input(event);
+
                 // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
                 let is_cmd = (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
                 //log::trace!("is_cmd is: {}", is_cmd);
@@ -276,6 +278,15 @@ impl State {
                     };
                 }
 
+                EventResponse {
+                    repaint: true,
+                    consumed,
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                self.on_keyboard_input(event);
+                let consumed = egui_ctx.wants_keyboard_input()
+                    || event.physical_key == winit::keyboard::KeyCode::Tab;
                 EventResponse {
                     repaint: true,
                     consumed,
@@ -339,15 +350,6 @@ impl State {
                 EventResponse {
                     repaint: true,
                     consumed: egui_ctx.wants_keyboard_input(),
-                }
-            }
-            WindowEvent::KeyboardInput { event, .. } => {
-                self.on_keyboard_input(event);
-                let consumed = egui_ctx.wants_keyboard_input()
-                    || event.physical_key == winit::keyboard::KeyCode::Tab;
-                EventResponse {
-                    repaint: true,
-                    consumed,
                 }
             }
             WindowEvent::Focused(focused) => {
