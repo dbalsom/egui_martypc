@@ -249,33 +249,28 @@ impl State {
                     consumed,
                 }
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    winit::event::KeyEvent {
-                        logical_key: winit::keyboard::Key::Character(key_str),
-                        state,
-                        ..
-                    },
-                ..
-            } => {
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                let mut consumed = false;
                 self.on_keyboard_input(event);
 
-                // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
-                let is_cmd = (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
-                //log::trace!("is_cmd is: {}", is_cmd);
+                if let winit::keyboard::Key::Character(key_str) = &event.logical_key {
+                    // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
+                    let is_cmd =
+                        (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
+                    //log::trace!("is_cmd is: {}", is_cmd);
 
-                let mut consumed = false;
-
-                // Only send key-down events to egui
-                if let ElementState::Pressed = state {
-                    consumed = if is_printable_key(key_str) && !is_cmd {
-                        self.egui_input
-                            .events
-                            .push(egui::Event::Text(key_str.to_string()));
-                        egui_ctx.wants_keyboard_input()
-                    } else {
-                        false
-                    };
+                    // Only send key-down events to egui
+                    if let ElementState::Pressed = event.state {
+                        consumed = if is_printable_key(&key_str) && !is_cmd {
+                            self.egui_input
+                                .events
+                                .push(egui::Event::Text(key_str.to_string()));
+                            egui_ctx.wants_keyboard_input()
+                        } else {
+                            false
+                        };
+                    }
                 }
 
                 EventResponse {
@@ -283,6 +278,7 @@ impl State {
                     consumed,
                 }
             }
+            /*
             WindowEvent::KeyboardInput { event, .. } => {
                 self.on_keyboard_input(event);
                 let consumed = egui_ctx.wants_keyboard_input()
@@ -292,6 +288,7 @@ impl State {
                     consumed,
                 }
             }
+            */
             /*
             WindowEvent::ReceivedCharacter(ch) => {
                 // On Mac we get here when the user presses Cmd-C (copy), ctrl-W, etc.
