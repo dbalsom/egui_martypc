@@ -260,6 +260,7 @@ impl State {
             } => {
                 // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
                 let is_cmd = (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
+                log::warn!("is_cmd is: {}", is_cmd);
 
                 let mut consumed = false;
 
