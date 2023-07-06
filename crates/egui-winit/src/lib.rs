@@ -260,7 +260,7 @@ impl State {
             } => {
                 // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
                 let is_cmd = (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
-                log::warn!("is_cmd is: {}", is_cmd);
+                //log::trace!("is_cmd is: {}", is_cmd);
 
                 let mut consumed = false;
 
@@ -408,12 +408,14 @@ impl State {
                     state.control_key()
                 };
 
-                log::warn!(
+                /*
+                log::trace!(
                     "modifiers: alt: {} ctrl: {} shift: {}",
                     self.egui_input.modifiers.alt,
                     self.egui_input.modifiers.ctrl,
                     self.egui_input.modifiers.shift
                 );
+                */
 
                 EventResponse {
                     repaint: true,
