@@ -390,32 +390,21 @@ impl State {
                     consumed: false,
                 }
             }
-            WindowEvent::ModifiersChanged(state) => {
+            WindowEvent::ModifiersChanged(modifiers) => {
                 use winit::keyboard::ModifiersKeyState;
 
-                self.egui_input.modifiers.alt =
-                    matches!(state.lalt_state(), ModifiersKeyState::Pressed);
-                self.egui_input.modifiers.alt |=
-                    matches!(state.ralt_state(), ModifiersKeyState::Pressed);
+                let state = modifiers.state();
 
-                self.egui_input.modifiers.ctrl =
-                    matches!(state.lcontrol_state(), ModifiersKeyState::Pressed);
-                self.egui_input.modifiers.ctrl |=
-                    matches!(state.rcontrol_state(), ModifiersKeyState::Pressed);
+                self.egui_input.modifiers.alt = state.alt_key();
+                self.egui_input.modifiers.ctrl = state.control_key();
+                self.egui_input.modifiers.shift = state.shift_key();
 
-                self.egui_input.modifiers.shift =
-                    matches!(state.lshift_state(), ModifiersKeyState::Pressed);
-                self.egui_input.modifiers.shift |=
-                    matches!(state.rshift_state(), ModifiersKeyState::Pressed);
-
-                self.egui_input.modifiers.mac_cmd = cfg!(target_os = "macos")
-                    && matches!(state.lsuper_state(), ModifiersKeyState::Pressed);
+                self.egui_input.modifiers.mac_cmd = cfg!(target_os = "macos") && state.super_key();
 
                 self.egui_input.modifiers.command = if cfg!(target_os = "macos") {
-                    matches!(state.lsuper_state(), ModifiersKeyState::Pressed)
+                    state.super_key()
                 } else {
-                    matches!(state.lcontrol_state(), ModifiersKeyState::Pressed)
-                        || matches!(state.rcontrol_state(), ModifiersKeyState::Pressed)
+                    state.control_key()
                 };
                 EventResponse {
                     repaint: true,
