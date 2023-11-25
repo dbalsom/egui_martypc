@@ -395,16 +395,18 @@ impl State {
                     consumed: egui_ctx.wants_keyboard_input(),
                 }
             }
+            /*
             WindowEvent::KeyboardInput { input, .. } => {
                 self.on_keyboard_input(input);
                 // When pressing the Tab key, egui focuses the first focusable element, hence Tab always consumes.
                 let consumed = egui_ctx.wants_keyboard_input()
-                    || input.virtual_keycode == Some(winit::event::VirtualKeyCode::Tab);
+                    || input.virtual_keycode == Some(winit::event:VirtualKeyCode::Tab);
                 EventResponse {
                     repaint: true,
                     consumed,
                 }
             }
+            */
             WindowEvent::Focused(focused) => {
                 self.egui_input.focused = *focused;
                 // We will not be given a KeyboardInput event when the modifiers are released while
