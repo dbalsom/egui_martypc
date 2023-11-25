@@ -30,8 +30,10 @@ pub(crate) use profiling_scopes::*;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event_loop::EventLoopWindowTarget,
-    window::{CursorGrabMode, Window, WindowButtons, WindowLevel},
+    keyboard::{self, PhysicalKey},
+    window::{CursorGrabMode, Window, WindowButtons, WindowLevel}
 };
+use winit::dpi::LogicalSize;
 
 pub fn screen_size_in_pixels(window: &Window) -> egui::Vec2 {
     let size = window.inner_size();
@@ -232,7 +234,7 @@ impl State {
     pub fn on_window_event(
         &mut self,
         egui_ctx: &egui::Context,
-        event: &winit::event::WindowEvent<'_>,
+        event: &winit::event::WindowEvent,
     ) -> EventResponse {
         crate::profile_function!(short_window_event_description(event));
         use winit::event::ElementState;
@@ -300,10 +302,10 @@ impl State {
                 let mut consumed = false;
                 self.on_keyboard_input(event);
 
-                if let winit::keyboard::Key::Character(key_str) = &event.logical_key {
+                if let keyboard::Key::Character(key_str) = &event.logical_key {
                     // Filter keystrokes that are actually Cmd-X or Ctrl-X commands
                     let is_cmd =
-                        (self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd);
+                        self.egui_input.modifiers.ctrl || self.egui_input.modifiers.mac_cmd;
                     //log::trace!("is_cmd is: {}", is_cmd);
 
                     // Only send key-down events to egui
@@ -449,7 +451,6 @@ impl State {
                 }
             }
             WindowEvent::ModifiersChanged(modifiers) => {
-                use winit::keyboard::ModifiersKeyState;
 
                 let state = modifiers.state();
 
@@ -513,6 +514,20 @@ impl State {
                     consumed: egui_ctx.wants_pointer_input(),
                 }
             }
+            // DGB: Moved to WindowEvent in 0.29.2. We weren't handling it before either.
+            WindowEvent::RedrawRequested => {
+                EventResponse {
+                    repaint: false,
+                    consumed: false,
+                }
+            },
+            // DGB: Added to WindowEvent in 0.29.2. I don't know what it does.
+            WindowEvent::ActivationTokenDone{ .. } => {
+                EventResponse {
+                    repaint: false,
+                    consumed: false,
+                }
+            },
         }
     }
 
@@ -710,14 +725,21 @@ impl State {
     fn on_keyboard_input(&mut self, input: &winit::event::KeyEvent) {
         let pressed = input.state == winit::event::ElementState::Pressed;
 
-        if pressed {
+        // DGB: For winit 0.29.4 input is now a PhysicalKey enum. Destructure to keycode.
+        let keycode: Option<winit::keyboard::KeyCode> = match input.physical_key {
+            PhysicalKey::Code(keycode) => Some(keycode),
+            PhysicalKey::Unidentified(_) => None,
+        };
+
+        if pressed && keycode.is_some() {
+            // TODO: DGB: Is this still the case in Winit 0.29? We could go back to native handling.
             // VirtualKeyCode::Paste etc in winit are broken/untrustworthy,
             // so we detect these things manually:
-            if is_cut_command(self.egui_input.modifiers, input.physical_key) {
+            if is_cut_command(self.egui_input.modifiers, keycode.unwrap()) {
                 self.egui_input.events.push(egui::Event::Cut);
-            } else if is_copy_command(self.egui_input.modifiers, input.physical_key) {
+            } else if is_copy_command(self.egui_input.modifiers, keycode.unwrap()) {
                 self.egui_input.events.push(egui::Event::Copy);
-            } else if is_paste_command(self.egui_input.modifiers, input.physical_key) {
+            } else if is_paste_command(self.egui_input.modifiers, keycode.unwrap()) {
                 if let Some(contents) = self.clipboard.get() {
                     let contents = contents.replace("\r\n", "\n");
                     if !contents.is_empty() {
@@ -725,15 +747,18 @@ impl State {
                     }
                 }
             }
+            // Some platform-specific keycode we could handle here...
         }
 
-        if let Some(key) = translate_key_code(input.physical_key) {
-            self.egui_input.events.push(egui::Event::Key {
-                key,
-                pressed,
-                repeat: false, // egui will fill this in for us!
-                modifiers: self.egui_input.modifiers,
-            });
+        if let Some(keycode) = keycode {
+            if let Some(key) = translate_key_code(keycode) {
+                self.egui_input.events.push(egui::Event::Key {
+                    key,
+                    pressed,
+                    repeat: false, // egui will fill this in for us!
+                    modifiers: self.egui_input.modifiers,
+                });
+            }
         }
     }
 
@@ -919,6 +944,9 @@ fn open_url_in_browser(_url: &str) {
 /// Ignore those.
 /// We also ignore '\r', '\n', '\t'.
 /// Newlines are handled by the `Key::Enter` event.
+///
+/// DGB: Moved logic to 'is_printable_key' for 0.29.2
+#[allow(dead_code)]
 fn is_printable_char(chr: char) -> bool {
     let is_in_private_use_area = '\u{e000}' <= chr && chr <= '\u{f8ff}'
         || '\u{f0000}' <= chr && chr <= '\u{ffffd}'
@@ -943,25 +971,25 @@ fn is_printable_key(key: &str) -> bool {
     }
 }
 
-fn is_cut_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
-    (modifiers.command && keycode == winit::keyboard::KeyCode::KeyX)
+fn is_cut_command(modifiers: egui::Modifiers, keycode: keyboard::KeyCode) -> bool {
+    (modifiers.command && keycode == keyboard::KeyCode::KeyX)
         || (cfg!(target_os = "windows")
             && modifiers.shift
-            && keycode == winit::keyboard::KeyCode::Delete)
+            && keycode == keyboard::KeyCode::Delete)
 }
 
-fn is_copy_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
-    (modifiers.command && keycode == winit::keyboard::KeyCode::KeyC)
+fn is_copy_command(modifiers: egui::Modifiers, keycode: keyboard::KeyCode) -> bool {
+    (modifiers.command && keycode == keyboard::KeyCode::KeyC)
         || (cfg!(target_os = "windows")
             && modifiers.ctrl
-            && keycode == winit::keyboard::KeyCode::Insert)
+            && keycode == keyboard::KeyCode::Insert)
 }
 
-fn is_paste_command(modifiers: egui::Modifiers, keycode: winit::keyboard::KeyCode) -> bool {
-    (modifiers.command && keycode == winit::keyboard::KeyCode::KeyV)
+fn is_paste_command(modifiers: egui::Modifiers, keycode: keyboard::KeyCode) -> bool {
+    (modifiers.command && keycode == keyboard::KeyCode::KeyV)
         || (cfg!(target_os = "windows")
             && modifiers.shift
-            && keycode == winit::keyboard::KeyCode::Insert)
+            && keycode == keyboard::KeyCode::Insert)
 }
 
 fn translate_mouse_button(button: winit::event::MouseButton) -> Option<egui::PointerButton> {
@@ -975,7 +1003,7 @@ fn translate_mouse_button(button: winit::event::MouseButton) -> Option<egui::Poi
     }
 }
 
-fn translate_key_code(key: winit::keyboard::KeyCode) -> Option<egui::Key> {
+fn translate_key_code(key: keyboard::KeyCode) -> Option<egui::Key> {
     use egui::Key;
     use winit::keyboard::KeyCode;
 
@@ -1271,7 +1299,8 @@ fn process_viewport_command(
         ViewportCommand::InnerSize(size) => {
             let width_px = pixels_per_point * size.x.max(1.0);
             let height_px = pixels_per_point * size.y.max(1.0);
-            window.set_inner_size(PhysicalSize::new(width_px, height_px));
+            // DGB: Renamed in 0.29.2
+            let _ = window.request_inner_size(PhysicalSize::new(width_px, height_px));
         }
         ViewportCommand::BeginResize(direction) => {
             if let Err(err) = window.drag_resize_window(match direction {
@@ -1356,10 +1385,19 @@ fn process_viewport_command(
             }));
         }
         ViewportCommand::IMEPosition(pos) => {
-            window.set_ime_position(PhysicalPosition::new(
-                pixels_per_point * pos.x,
-                pixels_per_point * pos.y,
-            ));
+            // DGB: Renamed in 0.29.2 and added size parameter.
+            // TODO: I am not sure what size should be provided. Just using the values in the docs
+            //       example for now.
+            window.set_ime_cursor_area(
+                PhysicalPosition::new(
+                    pixels_per_point * pos.x,
+                    pixels_per_point * pos.y,
+                ),
+                LogicalSize::new(
+                    100,
+                    100,
+                )
+            );
         }
         ViewportCommand::IMEAllowed(v) => window.set_ime_allowed(v),
         ViewportCommand::IMEPurpose(p) => window.set_ime_purpose(match p {
@@ -1577,16 +1615,21 @@ pub fn apply_viewport_builder_to_new_window(window: &Window, builder: &ViewportB
 
 /// Short and fast description of an event.
 /// Useful for logging and profiling.
-pub fn short_generic_event_description<T>(event: &winit::event::Event<'_, T>) -> &'static str {
+pub fn short_generic_event_description<T>(event: &winit::event::Event<T>) -> &'static str {
     use winit::event::{DeviceEvent, Event, StartCause};
 
     match event {
         Event::Suspended => "Event::Suspended",
         Event::Resumed => "Event::Resumed",
-        Event::MainEventsCleared => "Event::MainEventsCleared",
-        Event::RedrawRequested(_) => "Event::RedrawRequested",
-        Event::RedrawEventsCleared => "Event::RedrawEventsCleared",
-        Event::LoopDestroyed => "Event::LoopDestroyed",
+        // DGB: Removed in 0.29.2
+        //Event::MainEventsCleared => "Event::MainEventsCleared",
+        //Event::RedrawEventsCleared => "Event::RedrawEventsCleared",
+
+        // DGB: Moved to WindowEvent in 0.29.2
+        //Event::RedrawRequested(_) => "Event::RedrawRequested",
+
+        // DGB: Renamed from LoopDestroyed in 0.29.2
+        Event::LoopExiting => "Event::LoopExiting",
         Event::UserEvent(_) => "UserEvent",
         Event::DeviceEvent { event, .. } => match event {
             DeviceEvent::Added { .. } => "DeviceEvent::Added",
@@ -1596,7 +1639,8 @@ pub fn short_generic_event_description<T>(event: &winit::event::Event<'_, T>) ->
             DeviceEvent::Motion { .. } => "DeviceEvent::Motion",
             DeviceEvent::Button { .. } => "DeviceEvent::Button",
             DeviceEvent::Key { .. } => "DeviceEvent::Key",
-            DeviceEvent::Text { .. } => "DeviceEvent::Text",
+            // DGB: Removed in 0.29.2
+            //DeviceEvent::Text { .. } => "DeviceEvent::Text",
         },
         Event::NewEvents(start_cause) => match start_cause {
             StartCause::ResumeTimeReached { .. } => "NewEvents::ResumeTimeReached",
@@ -1605,15 +1649,18 @@ pub fn short_generic_event_description<T>(event: &winit::event::Event<'_, T>) ->
             StartCause::Init => "NewEvents::Init",
         },
         Event::WindowEvent { event, .. } => short_window_event_description(event),
+        Event::AboutToWait => "Event::AboutToWait",
+        Event::MemoryWarning => "Event::MemoryWarning",
     }
 }
 
 /// Short and fast description of an event.
 /// Useful for logging and profiling.
-pub fn short_window_event_description(event: &winit::event::WindowEvent<'_>) -> &'static str {
+pub fn short_window_event_description(event: &winit::event::WindowEvent) -> &'static str {
     use winit::event::WindowEvent;
 
     match event {
+
         WindowEvent::Resized { .. } => "WindowEvent::Resized",
         WindowEvent::Moved { .. } => "WindowEvent::Moved",
         WindowEvent::CloseRequested { .. } => "WindowEvent::CloseRequested",
@@ -1621,7 +1668,8 @@ pub fn short_window_event_description(event: &winit::event::WindowEvent<'_>) -> 
         WindowEvent::DroppedFile { .. } => "WindowEvent::DroppedFile",
         WindowEvent::HoveredFile { .. } => "WindowEvent::HoveredFile",
         WindowEvent::HoveredFileCancelled { .. } => "WindowEvent::HoveredFileCancelled",
-        WindowEvent::ReceivedCharacter { .. } => "WindowEvent::ReceivedCharacter",
+        // DGB: Removed in 0.29.2
+        //WindowEvent::ReceivedCharacter { .. } => "WindowEvent::ReceivedCharacter",
         WindowEvent::Focused { .. } => "WindowEvent::Focused",
         WindowEvent::KeyboardInput { .. } => "WindowEvent::KeyboardInput",
         WindowEvent::ModifiersChanged { .. } => "WindowEvent::ModifiersChanged",
@@ -1640,6 +1688,9 @@ pub fn short_window_event_description(event: &winit::event::WindowEvent<'_>) -> 
         WindowEvent::ScaleFactorChanged { .. } => "WindowEvent::ScaleFactorChanged",
         WindowEvent::ThemeChanged { .. } => "WindowEvent::ThemeChanged",
         WindowEvent::Occluded { .. } => "WindowEvent::Occluded",
+        // DGB: New here in 0.29.2
+        WindowEvent::RedrawRequested => "WindowEvent::RedrawRequested",
+        WindowEvent::ActivationTokenDone { .. } => "WindowEVent::ActivationTokenDone",
     }
 }
 
