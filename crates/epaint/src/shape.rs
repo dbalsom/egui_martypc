@@ -1,6 +1,5 @@
 //! The different shapes that can be painted.
 
-use std::ops::RangeInclusive;
 use std::{any::Any, sync::Arc};
 
 use crate::{
@@ -94,17 +93,19 @@ impl Shape {
     }
 
     /// A horizontal line.
-    pub fn hline(x: RangeInclusive<f32>, y: f32, stroke: impl Into<Stroke>) -> Self {
+    pub fn hline(x: impl Into<Rangef>, y: f32, stroke: impl Into<Stroke>) -> Self {
+        let x = x.into();
         Shape::LineSegment {
-            points: [pos2(*x.start(), y), pos2(*x.end(), y)],
+            points: [pos2(x.min, y), pos2(x.max, y)],
             stroke: stroke.into(),
         }
     }
 
     /// A vertical line.
-    pub fn vline(x: f32, y: RangeInclusive<f32>, stroke: impl Into<Stroke>) -> Self {
+    pub fn vline(x: f32, y: impl Into<Rangef>, stroke: impl Into<Stroke>) -> Self {
+        let y = y.into();
         Shape::LineSegment {
-            points: [pos2(x, *y.start()), pos2(x, *y.end())],
+            points: [pos2(x, y.min), pos2(x, y.max)],
             stroke: stroke.into(),
         }
     }
@@ -281,6 +282,8 @@ impl Shape {
     pub fn texture_id(&self) -> super::TextureId {
         if let Shape::Mesh(mesh) = self {
             mesh.texture_id
+        } else if let Shape::Rect(rect_shape) = self {
+            rect_shape.fill_texture_id
         } else {
             super::TextureId::default()
         }
@@ -405,6 +408,8 @@ pub struct PathShape {
 
     /// Color and thickness of the line.
     pub stroke: Stroke,
+    // TODO(emilk): Add texture support either by supplying uv for each point,
+    // or by some transform from points to uv (e.g. a callback or a linear transform matrix).
 }
 
 impl PathShape {
@@ -475,7 +480,7 @@ impl From<PathShape> for Shape {
 pub struct RectShape {
     pub rect: Rect,
 
-    /// How rounded the corners are. Use `Rounding::none()` for no rounding.
+    /// How rounded the corners are. Use `Rounding::ZERO` for no rounding.
     pub rounding: Rounding,
 
     /// How to fill the rectangle.
@@ -483,9 +488,39 @@ pub struct RectShape {
 
     /// The thickness and color of the outline.
     pub stroke: Stroke,
+
+    /// If the rect should be filled with a texture, which one?
+    ///
+    /// The texture is multiplied with [`Self::fill`].
+    pub fill_texture_id: TextureId,
+
+    /// What UV coordinates to use for the texture?
+    ///
+    /// To display a texture, set [`Self::fill_texture_id`],
+    /// and set this to `Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0))`.
+    ///
+    /// Use [`Rect::ZERO`] to turn off texturing.
+    pub uv: Rect,
 }
 
 impl RectShape {
+    #[inline]
+    pub fn new(
+        rect: Rect,
+        rounding: impl Into<Rounding>,
+        fill_color: impl Into<Color32>,
+        stroke: impl Into<Stroke>,
+    ) -> Self {
+        Self {
+            rect,
+            rounding: rounding.into(),
+            fill: fill_color.into(),
+            stroke: stroke.into(),
+            fill_texture_id: Default::default(),
+            uv: Rect::ZERO,
+        }
+    }
+
     #[inline]
     pub fn filled(
         rect: Rect,
@@ -497,6 +532,8 @@ impl RectShape {
             rounding: rounding.into(),
             fill: fill_color.into(),
             stroke: Default::default(),
+            fill_texture_id: Default::default(),
+            uv: Rect::ZERO,
         }
     }
 
@@ -507,6 +544,8 @@ impl RectShape {
             rounding: rounding.into(),
             fill: Default::default(),
             stroke: stroke.into(),
+            fill_texture_id: Default::default(),
+            uv: Rect::ZERO,
         }
     }
 
@@ -548,7 +587,7 @@ pub struct Rounding {
 impl Default for Rounding {
     #[inline]
     fn default() -> Self {
-        Self::none()
+        Self::ZERO
     }
 }
 
@@ -565,6 +604,14 @@ impl From<f32> for Rounding {
 }
 
 impl Rounding {
+    /// No rounding on any corner.
+    pub const ZERO: Self = Self {
+        nw: 0.0,
+        ne: 0.0,
+        sw: 0.0,
+        se: 0.0,
+    };
+
     #[inline]
     pub fn same(radius: f32) -> Self {
         Self {
@@ -576,6 +623,7 @@ impl Rounding {
     }
 
     #[inline]
+    #[deprecated = "Use Rounding::ZERO"]
     pub fn none() -> Self {
         Self {
             nw: 0.0,
@@ -741,6 +789,8 @@ pub struct PaintCallbackInfo {
     /// Rect is the [-1, +1] of the Normalized Device Coordinates.
     ///
     /// Note than only a portion of this may be visible due to [`Self::clip_rect`].
+    ///
+    /// This comes from [`PaintCallback::rect`].
     pub viewport: Rect,
 
     /// Clip rectangle in points.
@@ -753,44 +803,83 @@ pub struct PaintCallbackInfo {
     pub screen_size_px: [u32; 2],
 }
 
+/// Size of the viewport in whole, physical pixels.
 pub struct ViewportInPixels {
     /// Physical pixel offset for left side of the viewport.
-    pub left_px: f32,
+    pub left_px: i32,
 
     /// Physical pixel offset for top side of the viewport.
-    pub top_px: f32,
+    pub top_px: i32,
 
     /// Physical pixel offset for bottom side of the viewport.
     ///
     /// This is what `glViewport`, `glScissor` etc expects for the y axis.
-    pub from_bottom_px: f32,
+    pub from_bottom_px: i32,
 
     /// Viewport width in physical pixels.
-    pub width_px: f32,
+    pub width_px: i32,
 
     /// Viewport height in physical pixels.
-    pub height_px: f32,
+    pub height_px: i32,
+}
+
+impl ViewportInPixels {
+    fn from_points(rect: &Rect, pixels_per_point: f32, screen_size_px: [u32; 2]) -> Self {
+        // Fractional pixel values for viewports are generally valid, but may cause sampling issues
+        // and rounding errors might cause us to get out of bounds.
+
+        // Round:
+        let left_px = (pixels_per_point * rect.min.x).round() as i32; // inclusive
+        let top_px = (pixels_per_point * rect.min.y).round() as i32; // inclusive
+        let right_px = (pixels_per_point * rect.max.x).round() as i32; // exclusive
+        let bottom_px = (pixels_per_point * rect.max.y).round() as i32; // exclusive
+
+        // Clamp to screen:
+        let screen_width = screen_size_px[0] as i32;
+        let screen_height = screen_size_px[1] as i32;
+        let left_px = left_px.clamp(0, screen_width);
+        let right_px = right_px.clamp(left_px, screen_width);
+        let top_px = top_px.clamp(0, screen_height);
+        let bottom_px = bottom_px.clamp(top_px, screen_height);
+
+        let width_px = right_px - left_px;
+        let height_px = bottom_px - top_px;
+
+        Self {
+            left_px,
+            top_px,
+            from_bottom_px: screen_height - height_px - top_px,
+            width_px,
+            height_px,
+        }
+    }
+}
+
+#[test]
+fn test_viewport_rounding() {
+    for i in 0..=10_000 {
+        // Two adjacent viewports should never overlap:
+        let x = i as f32 / 97.0;
+        let left = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 100.0)).with_max_x(x);
+        let right = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 100.0)).with_min_x(x);
+
+        for pixels_per_point in [0.618, 1.0, std::f32::consts::PI] {
+            let left = ViewportInPixels::from_points(&left, pixels_per_point, [100, 100]);
+            let right = ViewportInPixels::from_points(&right, pixels_per_point, [100, 100]);
+            assert_eq!(left.left_px + left.width_px, right.left_px);
+        }
+    }
 }
 
 impl PaintCallbackInfo {
-    fn points_to_pixels(&self, rect: &Rect) -> ViewportInPixels {
-        ViewportInPixels {
-            left_px: rect.min.x * self.pixels_per_point,
-            top_px: rect.min.y * self.pixels_per_point,
-            from_bottom_px: self.screen_size_px[1] as f32 - rect.max.y * self.pixels_per_point,
-            width_px: rect.width() * self.pixels_per_point,
-            height_px: rect.height() * self.pixels_per_point,
-        }
-    }
-
     /// The viewport rectangle. This is what you would use in e.g. `glViewport`.
     pub fn viewport_in_pixels(&self) -> ViewportInPixels {
-        self.points_to_pixels(&self.viewport)
+        ViewportInPixels::from_points(&self.viewport, self.pixels_per_point, self.screen_size_px)
     }
 
     /// The "scissor" or "clip" rectangle. This is what you would use in e.g. `glScissor`.
     pub fn clip_rect_in_pixels(&self) -> ViewportInPixels {
-        self.points_to_pixels(&self.clip_rect)
+        ViewportInPixels::from_points(&self.clip_rect, self.pixels_per_point, self.screen_size_px)
     }
 }
 
@@ -800,13 +889,15 @@ impl PaintCallbackInfo {
 #[derive(Clone)]
 pub struct PaintCallback {
     /// Where to paint.
+    ///
+    /// This will become [`PaintCallbackInfo::viewport`].
     pub rect: Rect,
 
     /// Paint something custom (e.g. 3D stuff).
     ///
     /// The concrete value of `callback` depends on the rendering backend used. For instance, the
     /// `glow` backend requires that callback be an `egui_glow::CallbackFn` while the `wgpu`
-    /// backend requires a `egui_wgpu::CallbackFn`.
+    /// backend requires a `egui_wgpu::Callback`.
     ///
     /// If the type cannot be downcast to the type expected by the current backend the callback
     /// will not be drawn.
@@ -816,7 +907,9 @@ pub struct PaintCallback {
     ///
     /// The rendering backend is also responsible for restoring any state, such as the bound shader
     /// program, vertex array, etc.
-    pub callback: Arc<dyn Any + Sync + Send>,
+    ///
+    /// Shape has to be clone, therefore this has to be an `Arc` instead of a `Box`.
+    pub callback: Arc<dyn Any + Send + Sync>,
 }
 
 impl std::fmt::Debug for PaintCallback {

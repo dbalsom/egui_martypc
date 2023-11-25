@@ -10,8 +10,8 @@ pub use wgpu;
 
 /// Low-level painting of [`egui`](https://github.com/emilk/egui) on [`wgpu`].
 pub mod renderer;
-pub use renderer::CallbackFn;
 pub use renderer::Renderer;
+pub use renderer::{Callback, CallbackResources, CallbackTrait};
 
 /// Module for painting [`egui`](https://github.com/emilk/egui) with [`wgpu`] on [`winit`].
 #[cfg(feature = "winit")]
@@ -67,21 +67,32 @@ impl RenderState {
         depth_format: Option<wgpu::TextureFormat>,
         msaa_samples: u32,
     ) -> Result<Self, WgpuError> {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: config.power_preference,
-                compatible_surface: Some(surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .ok_or(WgpuError::NoSuitableAdapterFound)?;
+        crate::profile_scope!("RenderState::create"); // async yield give bad names using `profile_function`
 
-        let target_format =
-            crate::preferred_framebuffer_format(&surface.get_capabilities(&adapter).formats)?;
+        let adapter = {
+            crate::profile_scope!("request_adapter");
+            instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: config.power_preference,
+                    compatible_surface: Some(surface),
+                    force_fallback_adapter: false,
+                })
+                .await
+                .ok_or(WgpuError::NoSuitableAdapterFound)?
+        };
 
-        let (device, queue) = adapter
-            .request_device(&(*config.device_descriptor)(&adapter), None)
-            .await?;
+        let capabilities = {
+            crate::profile_scope!("get_capabilities");
+            surface.get_capabilities(&adapter).formats
+        };
+        let target_format = crate::preferred_framebuffer_format(&capabilities)?;
+
+        let (device, queue) = {
+            crate::profile_scope!("request_device");
+            adapter
+                .request_device(&(*config.device_descriptor)(&adapter), None)
+                .await?
+        };
 
         let renderer = Renderer::new(&device, target_format, depth_format, msaa_samples);
 
@@ -121,6 +132,16 @@ pub struct WgpuConfiguration {
 
     /// Callback for surface errors.
     pub on_surface_error: Arc<dyn Fn(wgpu::SurfaceError) -> SurfaceErrorAction>,
+}
+
+impl std::fmt::Debug for WgpuConfiguration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WgpuConfiguration")
+            .field("supported_backends", &self.supported_backends)
+            .field("present_mode", &self.present_mode)
+            .field("power_preference", &self.power_preference)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for WgpuConfiguration {
@@ -203,22 +224,30 @@ pub fn depth_format_from_bits(depth_buffer: u8, stencil_buffer: u8) -> Option<wg
 
 // ---------------------------------------------------------------------------
 
-/// Profiling macro for feature "puffin"
-macro_rules! profile_function {
-    ($($arg: tt)*) => {
-        #[cfg(feature = "puffin")]
-        #[cfg(not(target_arch = "wasm32"))]
-        puffin::profile_function!($($arg)*);
-    };
-}
-pub(crate) use profile_function;
+mod profiling_scopes {
+    #![allow(unused_macros)]
+    #![allow(unused_imports)]
 
-/// Profiling macro for feature "puffin"
-macro_rules! profile_scope {
-    ($($arg: tt)*) => {
-        #[cfg(feature = "puffin")]
-        #[cfg(not(target_arch = "wasm32"))]
-        puffin::profile_scope!($($arg)*);
-    };
+    /// Profiling macro for feature "puffin"
+    macro_rules! profile_function {
+        ($($arg: tt)*) => {
+            #[cfg(feature = "puffin")]
+            #[cfg(not(target_arch = "wasm32"))] // Disabled on web because of the coarse 1ms clock resolution there.
+            puffin::profile_function!($($arg)*);
+        };
+    }
+    pub(crate) use profile_function;
+
+    /// Profiling macro for feature "puffin"
+    macro_rules! profile_scope {
+        ($($arg: tt)*) => {
+            #[cfg(feature = "puffin")]
+            #[cfg(not(target_arch = "wasm32"))] // Disabled on web because of the coarse 1ms clock resolution there.
+            puffin::profile_scope!($($arg)*);
+        };
+    }
+    pub(crate) use profile_scope;
 }
-pub(crate) use profile_scope;
+
+#[allow(unused_imports)]
+pub(crate) use profiling_scopes::*;

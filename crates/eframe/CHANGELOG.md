@@ -3,9 +3,92 @@ All notable changes to the `eframe` crate.
 
 NOTE: [`egui-winit`](../egui-winit/CHANGELOG.md), [`egui_glium`](../egui_glium/CHANGELOG.md), [`egui_glow`](../egui_glow/CHANGELOG.md),and [`egui-wgpu`](../egui-wgpu/CHANGELOG.md) have their own changelogs!
 
+This file is updated upon each release.
+Changes since the last release can be found by running the `scripts/generate_changelog.py` script.
 
-## Unreleased
-* Expose raw window and display handles in `CreationContext` and `Frame`
+
+## 0.24.0 - 2023-11-23
+* Multiple viewports/windows [#3172](https://github.com/emilk/egui/pull/3172) (thanks [@konkitoman](https://github.com/konkitoman)!)
+* Replace `eframe::Frame` commands and `WindowInfo` with egui [#3564](https://github.com/emilk/egui/pull/3564)
+* Use `egui::ViewportBuilder` in `eframe::NativeOptions` [#3572](https://github.com/emilk/egui/pull/3572)
+* Remove warm-starting [#3574](https://github.com/emilk/egui/pull/3574)
+* Fix copy and cut on Safari [#3513](https://github.com/emilk/egui/pull/3513) (thanks [@lunixbochs](https://github.com/lunixbochs)!)
+* Update puffin to 0.18 [#3600](https://github.com/emilk/egui/pull/3600)
+* Update MSRV to Rust 1.72 [#3595](https://github.com/emilk/egui/pull/3595)
+
+### Breaking changes:
+Most settings in `NativeOptions` have been moved to `NativeOptions::viewport`, which uses the new `egui::ViewportBuilder`:
+
+```diff
+ let native_options = eframe::nativeOptions {
+-    initial_window_size: Some(egui::vec2(320.0, 240.0)),
+-    drag_and_drop_support: true,
++    viewport: egui::ViewportBuilder::default()
++        .with_inner_size([320.0, 240.0])
++        .with_drag_and_drop(true),
+     ..Default::default()
+ };
+```
+
+`NativeOptions::fullsize_content` has been replaced with four settings: `ViewportBuilder::with_fullsize_content_view`, `with_title_shown`, `with_titlebar_shown`, `with_titlebar_buttons_shown`
+
+`frame.info().window_info` is gone, replaced with `ctx.input(|i| i.viewport())`.
+
+`frame.info().native_pixels_per_point` is replaced with `ctx.input(|i| i.raw.native_pixels_per_point)`.
+
+Most commands in `eframe::Frame` has been replaced with `egui::ViewportCommand`, so So `frame.close()` becomes `ctx.send_viewport_cmd(ViewportCommand::Close)`, etc.
+
+`App::on_close_event` has been replaced with `ctx.input(|i| i.viewport().close_requested())` and `ctx.send_viewport_cmd(ViewportCommand::CancelClose)`.
+
+`eframe::IconData` is now `egui::IconData`.
+
+`eframe::IconData::try_from_png_bytes` is now `eframe::icon_data::from_png_bytes`.
+
+`App::post_rendering` is gone. Screenshots are taken with `ctx.send_viewport_cmd(ViewportCommand::Screenshots)` and are returned in `egui::Event` which you can check with:
+``` rust
+ui.input(|i| {
+    for event in &i.raw.events {
+        if let egui::Event::Screenshot { viewport_id, image } = event {
+            // handle it here
+        }
+    }
+});
+```
+
+
+## 0.23.0 - 2023-09-27
+* Update MSRV to Rust 1.70.0 [#3310](https://github.com/emilk/egui/pull/3310)
+* Update to puffin 0.16 [#3144](https://github.com/emilk/egui/pull/3144)
+* Update to `wgpu` 0.17.0 [#3170](https://github.com/emilk/egui/pull/3170) (thanks [@Aaron1011](https://github.com/Aaron1011)!)
+* Improved wgpu callbacks [#3253](https://github.com/emilk/egui/pull/3253) (thanks [@Wumpf](https://github.com/Wumpf)!)
+* Improve documentation of `eframe`, especially for wasm32 [#3295](https://github.com/emilk/egui/pull/3295)
+* `eframe::Frame::info` returns a reference [#3301](https://github.com/emilk/egui/pull/3301) (thanks [@Barugon](https://github.com/Barugon)!)
+* Move `App::persist_window` to `NativeOptions` and `App::max_size_points` to `WebOptions` [#3397](https://github.com/emilk/egui/pull/3397)
+
+#### Desktop/Native:
+* Only show on-screen-keyboard and IME when editing text [#3362](https://github.com/emilk/egui/pull/3362) (thanks [@Barugon](https://github.com/Barugon)!)
+* Add `eframe::storage_dir` [#3286](https://github.com/emilk/egui/pull/3286)
+* Add `NativeOptions::window_builder` for more customization [#3390](https://github.com/emilk/egui/pull/3390) (thanks [@twop](https://github.com/twop)!)
+* Better restore Window position on Mac when on secondary monitor [#3239](https://github.com/emilk/egui/pull/3239)
+* Fix iOS support in `eframe` [#3241](https://github.com/emilk/egui/pull/3241) (thanks [@lucasmerlin](https://github.com/lucasmerlin)!)
+* Speed up `eframe` state storage [#3353](https://github.com/emilk/egui/pull/3353) (thanks [@sebbert](https://github.com/sebbert)!)
+* Allow users to opt-out of default `winit` features [#3228](https://github.com/emilk/egui/pull/3228)
+* Expose Raw Window and Display Handles [#3073](https://github.com/emilk/egui/pull/3073) (thanks [@bash](https://github.com/bash)!)
+* Use window title as fallback when app_id is not set [#3107](https://github.com/emilk/egui/pull/3107) (thanks [@jacekpoz](https://github.com/jacekpoz)!)
+* Sleep a bit only when minimized [#3139](https://github.com/emilk/egui/pull/3139) (thanks [@icedrocket](https://github.com/icedrocket)!)
+* Prevent text from being cleared when selected due to winit IME [#3376](https://github.com/emilk/egui/pull/3376) (thanks [@YgorSouza](https://github.com/YgorSouza)!)
+* Fix android app quit on resume with glow backend [#3080](https://github.com/emilk/egui/pull/3080) (thanks [@tkkcc](https://github.com/tkkcc)!)
+* Fix panic with persistence without window [#3167](https://github.com/emilk/egui/pull/3167) (thanks [@sagebind](https://github.com/sagebind)!)
+* Only call `run_return` twice on Windows [#3053](https://github.com/emilk/egui/pull/3053) (thanks [@pan93412](https://github.com/pan93412)!)
+* Gracefully catch error saving state to disk [#3230](https://github.com/emilk/egui/pull/3230)
+* Recognize numpad enter/plus/minus [#3285](https://github.com/emilk/egui/pull/3285)
+* Add more puffin profile scopes to `eframe` [#3330](https://github.com/emilk/egui/pull/3330) [#3332](https://github.com/emilk/egui/pull/3332)
+
+#### Web:
+* Update to wasm-bindgen 0.2.87 [#3237](https://github.com/emilk/egui/pull/3237)
+* Remove `Function()` invocation from eframe text_agent to bypass "unsafe-eval" restrictions in Chrome browser extensions. [#3349](https://github.com/emilk/egui/pull/3349) (thanks [@aspect](https://github.com/aspect)!)
+* Fix docs about web [#3026](https://github.com/emilk/egui/pull/3026) (thanks [@kerryeon](https://github.com/kerryeon)!)
+
 
 ## 0.22.0 - 2023-05-23
 * Fix: `request_repaint_after` works even when called from background thread [#2939](https://github.com/emilk/egui/pull/2939)

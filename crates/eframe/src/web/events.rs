@@ -8,28 +8,22 @@ use super::*;
 fn paint_and_schedule(runner_ref: &WebRunner) -> Result<(), JsValue> {
     // Only paint and schedule if there has been no panic
     if let Some(mut runner_lock) = runner_ref.try_lock() {
-        paint_if_needed(&mut runner_lock)?;
+        paint_if_needed(&mut runner_lock);
         drop(runner_lock);
         request_animation_frame(runner_ref.clone())?;
     }
-
     Ok(())
 }
 
-fn paint_if_needed(runner: &mut AppRunner) -> Result<(), JsValue> {
-    if runner.needs_repaint.when_to_repaint() <= now_sec() {
+fn paint_if_needed(runner: &mut AppRunner) {
+    if runner.needs_repaint.needs_repaint() {
         runner.needs_repaint.clear();
-        let (repaint_after, clipped_primitives) = runner.logic();
-        runner.paint(&clipped_primitives)?;
-        runner
-            .needs_repaint
-            .repaint_after(repaint_after.as_secs_f64());
-        runner.auto_save_if_needed();
+        runner.run_and_paint();
     }
-    Ok(())
+    runner.auto_save_if_needed();
 }
 
-pub fn request_animation_frame(runner_ref: WebRunner) -> Result<(), JsValue> {
+pub(crate) fn request_animation_frame(runner_ref: WebRunner) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let closure = Closure::once(move || paint_and_schedule(&runner_ref));
     window.request_animation_frame(closure.as_ref().unchecked_ref())?;
@@ -39,7 +33,7 @@ pub fn request_animation_frame(runner_ref: WebRunner) -> Result<(), JsValue> {
 
 // ------------------------------------------------------------------------
 
-pub fn install_document_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
+pub(crate) fn install_document_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
     let document = web_sys::window().unwrap().document().unwrap();
 
     {
@@ -175,21 +169,47 @@ pub fn install_document_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
     )?;
 
     #[cfg(web_sys_unstable_apis)]
-    runner_ref.add_event_listener(&document, "cut", |_: web_sys::ClipboardEvent, runner| {
-        runner.input.raw.events.push(egui::Event::Cut);
-        runner.needs_repaint.repaint_asap();
-    })?;
+    runner_ref.add_event_listener(
+        &document,
+        "cut",
+        |event: web_sys::ClipboardEvent, runner| {
+            runner.input.raw.events.push(egui::Event::Cut);
+
+            // In Safari we are only allowed to write to the clipboard during the
+            // event callback, which is why we run the app logic here and now:
+            runner.logic();
+
+            // Make sure we paint the output of the above logic call asap:
+            runner.needs_repaint.repaint_asap();
+
+            event.stop_propagation();
+            event.prevent_default();
+        },
+    )?;
 
     #[cfg(web_sys_unstable_apis)]
-    runner_ref.add_event_listener(&document, "copy", |_: web_sys::ClipboardEvent, runner| {
-        runner.input.raw.events.push(egui::Event::Copy);
-        runner.needs_repaint.repaint_asap();
-    })?;
+    runner_ref.add_event_listener(
+        &document,
+        "copy",
+        |event: web_sys::ClipboardEvent, runner| {
+            runner.input.raw.events.push(egui::Event::Copy);
+
+            // In Safari we are only allowed to write to the clipboard during the
+            // event callback, which is why we run the app logic here and now:
+            runner.logic();
+
+            // Make sure we paint the output of the above logic call asap:
+            runner.needs_repaint.repaint_asap();
+
+            event.stop_propagation();
+            event.prevent_default();
+        },
+    )?;
 
     Ok(())
 }
 
-pub fn install_window_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
+pub(crate) fn install_window_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
 
     // Save-on-close
@@ -211,7 +231,7 @@ pub fn install_window_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
     Ok(())
 }
 
-pub fn install_color_scheme_change_event(runner_ref: &WebRunner) -> Result<(), JsValue> {
+pub(crate) fn install_color_scheme_change_event(runner_ref: &WebRunner) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
 
     if let Some(media_query_list) = prefers_color_scheme_dark(&window)? {
@@ -230,7 +250,7 @@ pub fn install_color_scheme_change_event(runner_ref: &WebRunner) -> Result<(), J
     Ok(())
 }
 
-pub fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
+pub(crate) fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
     let canvas = canvas_element(runner_ref.try_lock().unwrap().canvas_id()).unwrap();
 
     {
@@ -266,6 +286,12 @@ pub fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
                     pressed: true,
                     modifiers,
                 });
+
+                // In Safari we are only allowed to write to the clipboard during the
+                // event callback, which is why we run the app logic here and now:
+                runner.logic();
+
+                // Make sure we paint the output of the above logic call asap:
                 runner.needs_repaint.repaint_asap();
             }
             event.stop_propagation();
@@ -295,6 +321,12 @@ pub fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
                 pressed: false,
                 modifiers,
             });
+
+            // In Safari we are only allowed to write to the clipboard during the
+            // event callback, which is why we run the app logic here and now:
+            runner.logic();
+
+            // Make sure we paint the output of the above logic call asap:
             runner.needs_repaint.repaint_asap();
 
             text_agent::update_text_agent(runner);
@@ -473,6 +505,7 @@ pub fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
                     for i in 0..files.length() {
                         if let Some(file) = files.get(i) {
                             let name = file.name();
+                            let mime = file.type_();
                             let last_modified = std::time::UNIX_EPOCH
                                 + std::time::Duration::from_millis(file.last_modified() as u64);
 
@@ -491,6 +524,7 @@ pub fn install_canvas_events(runner_ref: &WebRunner) -> Result<(), JsValue> {
                                             runner_lock.input.raw.dropped_files.push(
                                                 egui::DroppedFile {
                                                     name,
+                                                    mime,
                                                     last_modified: Some(last_modified),
                                                     bytes: Some(bytes.into()),
                                                     ..Default::default()
