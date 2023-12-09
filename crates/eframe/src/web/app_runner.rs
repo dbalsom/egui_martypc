@@ -13,7 +13,6 @@ pub struct AppRunner {
     app: Box<dyn epi::App>,
     pub(crate) needs_repaint: std::sync::Arc<NeedRepaint>,
     last_save_time: f64,
-    screen_reader: super::screen_reader::ScreenReader,
     pub(crate) text_cursor_pos: Option<egui::Pos2>,
     pub(crate) mutable_text_under_cursor: bool,
 
@@ -113,7 +112,6 @@ impl AppRunner {
             app,
             needs_repaint,
             last_save_time: now_sec(),
-            screen_reader: Default::default(),
             text_cursor_pos: None,
             mutable_text_under_cursor: false,
             textures_delta: Default::default(),
@@ -173,20 +171,8 @@ impl AppRunner {
         self.painter.destroy();
     }
 
-    /// Runs the user code and paints the UI.
-    ///
-    /// If there is already an outstanding frame of output,
-    /// that is painted instead.
-    pub fn run_and_paint(&mut self) {
-        if self.clipped_primitives.is_none() {
-            // Run user code, and paint the results:
-            self.logic();
-            self.paint();
-        } else {
-            // We have already run the logic, e.g. in an on-click event,
-            // so let's only present the results:
-            self.paint();
-        }
+    pub fn has_outstanding_paint_data(&self) -> bool {
+        self.clipped_primitives.is_some()
     }
 
     /// Runs the logic, but doesn't paint the result.
@@ -247,9 +233,9 @@ impl AppRunner {
     }
 
     fn handle_platform_output(&mut self, platform_output: egui::PlatformOutput) {
+        #[cfg(feature = "web_screen_reader")]
         if self.egui_ctx.options(|o| o.screen_reader) {
-            self.screen_reader
-                .speak(&platform_output.events_description());
+            super::screen_reader::speak(&platform_output.events_description());
         }
 
         let egui::PlatformOutput {
