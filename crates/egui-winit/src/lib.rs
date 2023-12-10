@@ -1643,7 +1643,7 @@ pub fn apply_viewport_builder_to_window(
         let pixels_per_point = pixels_per_point(egui_ctx, window);
 
         if let Some(size) = builder.inner_size {
-            window.set_inner_size(PhysicalSize::new(
+            _ = window.request_inner_size(PhysicalSize::new(
                 pixels_per_point * size.x,
                 pixels_per_point * size.y,
             ));
