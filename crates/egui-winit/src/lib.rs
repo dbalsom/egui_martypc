@@ -152,6 +152,10 @@ impl State {
         slf
     }
 
+    pub fn get_viewport_id(&self) -> ViewportId {
+        self.viewport_id
+    }
+
     #[cfg(feature = "accesskit")]
     pub fn init_accesskit<T: From<accesskit_winit::ActionRequestEvent> + Send>(
         &mut self,
