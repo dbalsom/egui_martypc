@@ -153,7 +153,9 @@ impl State {
     }
 
     pub fn get_viewport_id(&self) -> ViewportId {
-        self.viewport_id
+        // TODO: return a viewport id if we actually create one
+        //self.viewport_id
+        ViewportId::ROOT
     }
 
     #[cfg(feature = "accesskit")]
