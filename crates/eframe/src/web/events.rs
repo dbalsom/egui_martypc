@@ -179,7 +179,7 @@ pub(crate) fn on_keydown(event: web_sys::KeyboardEvent, runner: &mut AppRunner) 
         let hook = WINDOWEVENT_HOOK.read().unwrap();
         if let Some(ref sender) = *hook {
             log::trace!("Sending web_sys::KeyboardEvent to hook");
-            sender.send((window.id().clone(), event.clone())).unwrap();
+            sender.send(event.clone()).unwrap();
         }
         else {
             log::trace!("No window event hook installed");
