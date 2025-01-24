@@ -1229,6 +1229,7 @@ version = "0.30.0"
 dependencies = [
  "ahash",
  "bytemuck",
+ "crossbeam-channel",
  "directories",
  "document-features",
  "egui 0.30.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1241,6 +1242,7 @@ dependencies = [
  "home",
  "image",
  "js-sys",
+ "lazy_static",
  "log",
  "objc2",
  "objc2-app-kit",
