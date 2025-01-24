@@ -236,6 +236,8 @@ web-sys = { workspace = true, features = [
   "WheelEvent",
   "Window",
 ] }
+crossbeam-channel = "0.5.14"
+lazy_static = "1.5.0"
 
 # optional web:
 egui-wgpu = { workspace = true, optional = true } # if wgpu is used, use it without (!) winit
