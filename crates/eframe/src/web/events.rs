@@ -6,6 +6,20 @@ use super::{
 };
 use web_sys::EventTarget;
 
+lazy_static::lazy_static! {
+    static ref WINDOWEVENT_HOOK:
+        std::sync::RwLock<Option<crossbeam_channel::Sender<web_sys::KeyboardEvent>>,
+    > = std::sync::RwLock::new(None);
+}
+
+pub fn install_window_event_hook(sender: crossbeam_channel::Sender<web_sys::KeyboardEvent>) {
+    let mut hook = WINDOWEVENT_HOOK.write().unwrap();
+    assert!(hook.is_none());
+    log::debug!("Installing window event hook...");
+    *hook = Some(sender);
+}
+
+
 // TODO(emilk): there are more calls to `prevent_default` and `stop_propagation`
 // than what is probably needed.
 
@@ -159,6 +173,17 @@ pub(crate) fn on_keydown(event: web_sys::KeyboardEvent, runner: &mut AppRunner) 
     let has_focus = runner.input.raw.focused;
     if !has_focus {
         return;
+    }
+
+    {
+        let hook = WINDOWEVENT_HOOK.read().unwrap();
+        if let Some(ref sender) = *hook {
+            log::trace!("Sending web_sys::KeyboardEvent to hook");
+            sender.send((window.id().clone(), event.clone())).unwrap();
+        }
+        else {
+            log::trace!("No window event hook installed");
+        }
     }
 
     if event.is_composing() || event.key_code() == 229 {
