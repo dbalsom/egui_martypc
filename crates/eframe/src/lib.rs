@@ -147,6 +147,10 @@
 // Re-export all useful libraries:
 pub use {egui, egui::emath, egui::epaint};
 
+// Export our keyboard event hook
+#[cfg(target_arch = "wasm32")]
+pub use crate::web::install_keyboard_event_hook;
+
 #[cfg(feature = "glow")]
 pub use {egui_glow, glow};
 

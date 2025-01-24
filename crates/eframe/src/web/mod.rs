@@ -11,6 +11,8 @@ mod text_agent;
 mod web_logger;
 mod web_runner;
 
+pub use events::install_window_event_hook;
+
 /// Access to the browser screen reader.
 #[cfg(feature = "web_screen_reader")]
 pub mod screen_reader;

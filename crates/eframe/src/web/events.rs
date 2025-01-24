@@ -12,10 +12,10 @@ lazy_static::lazy_static! {
     > = std::sync::RwLock::new(None);
 }
 
-pub fn install_window_event_hook(sender: crossbeam_channel::Sender<web_sys::KeyboardEvent>) {
+pub fn install_keyboard_event_hook(sender: crossbeam_channel::Sender<web_sys::KeyboardEvent>) {
     let mut hook = WINDOWEVENT_HOOK.write().unwrap();
     assert!(hook.is_none());
-    log::debug!("Installing window event hook...");
+    log::debug!("Installing web keyboard event hook...");
     *hook = Some(sender);
 }
 
