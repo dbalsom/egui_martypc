@@ -290,6 +290,9 @@ impl State {
                 log::trace!("Sending window event to hook");
                 sender.send((window.id().clone(), event.clone())).unwrap();
             }
+            else {
+                log::trace!("No window event hook installed");
+            }
         }
 
         use winit::event::WindowEvent;
