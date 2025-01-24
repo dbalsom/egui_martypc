@@ -11,7 +11,7 @@ mod text_agent;
 mod web_logger;
 mod web_runner;
 
-pub use events::install_keyboard_event_hook;
+pub use crate::web::events::install_keyboard_event_hook;
 
 /// Access to the browser screen reader.
 #[cfg(feature = "web_screen_reader")]
