@@ -287,6 +287,7 @@ impl State {
         {
             let hook = WINDOWEVENT_HOOK.read().unwrap();
             if let Some(ref sender) = *hook {
+                log::trace!("Sending window event to hook");
                 sender.send((window.id().clone(), event.clone())).unwrap();
             }
         }
