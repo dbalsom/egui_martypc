@@ -34,11 +34,11 @@ use winit::{
 
 lazy_static::lazy_static! {
     static ref WINDOWEVENT_HOOK:
-        std::sync::RwLock<Option<crossbeam_channel::Sender<winit::event::WindowEvent>>,
+        std::sync::RwLock<Option<crossbeam_channel::Sender<(winit::window::WindowId, winit::event::WindowEvent)>>,
     > = std::sync::RwLock::new(None);
 }
 
-pub fn install_windowevent_hook(sender: crossbeam_channel::Sender<winit::event::WindowEvent>) {
+pub fn install_window_event_hook(sender: crossbeam_channel::Sender<(winit::window::WindowId, winit::event::WindowEvent)>) {
     let mut hook = WINDOWEVENT_HOOK.write().unwrap();
     assert!(hook.is_none());
     *hook = Some(sender);
@@ -287,7 +287,7 @@ impl State {
         {
             let hook = WINDOWEVENT_HOOK.read().unwrap();
             if let Some(ref sender) = *hook {
-                sender.send(event.clone()).unwrap();
+                sender.send((window.id().clone(), event.clone())).unwrap();
             }
         }
 
