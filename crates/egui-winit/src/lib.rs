@@ -41,6 +41,7 @@ lazy_static::lazy_static! {
 pub fn install_window_event_hook(sender: crossbeam_channel::Sender<(winit::window::WindowId, winit::event::WindowEvent)>) {
     let mut hook = WINDOWEVENT_HOOK.write().unwrap();
     assert!(hook.is_none());
+    log::debug!("Installing window event hook...");
     *hook = Some(sender);
 }
 
