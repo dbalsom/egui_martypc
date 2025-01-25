@@ -151,6 +151,7 @@ pub use {egui, egui::emath, egui::epaint};
 #[cfg(target_arch = "wasm32")]
 pub use crate::web::install_keyboard_event_hook;
 
+#[derive (Clone, Debug)]
 pub struct WebKeyboardEvent {
     pub key: String,
     pub pressed: bool,
