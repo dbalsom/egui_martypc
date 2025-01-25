@@ -5,14 +5,15 @@ use super::{
     Closure, JsCast, JsValue, WebRunner,
 };
 use web_sys::EventTarget;
+use crate::WebKeyboardEvent;
 
 lazy_static::lazy_static! {
     static ref WINDOWEVENT_HOOK:
-        std::sync::RwLock<Option<crossbeam_channel::Sender<web_sys::KeyboardEvent>>,
+        std::sync::RwLock<Option<crossbeam_channel::Sender<WebKeyboardEvent>>,
     > = std::sync::RwLock::new(None);
 }
 
-pub fn install_keyboard_event_hook(sender: crossbeam_channel::Sender<web_sys::KeyboardEvent>) {
+pub fn install_keyboard_event_hook(sender: crossbeam_channel::Sender<WebKeyboardEvent>) {
     let mut hook = WINDOWEVENT_HOOK.write().unwrap();
     assert!(hook.is_none());
     log::debug!("Installing web keyboard event hook...");
@@ -179,7 +180,11 @@ pub(crate) fn on_keydown(event: web_sys::KeyboardEvent, runner: &mut AppRunner) 
         let hook = WINDOWEVENT_HOOK.read().unwrap();
         if let Some(ref sender) = *hook {
             log::trace!("Sending web_sys::KeyboardEvent to hook");
-            sender.send(event.clone()).unwrap();
+            let web_event = WebKeyboardEvent {
+                event: event.key(),
+                pressed: true,
+            };
+            sender.send(web_event).unwrap();
         }
         else {
             log::trace!("No window event hook installed");
@@ -276,6 +281,21 @@ pub(crate) fn on_keyup(event: web_sys::KeyboardEvent, runner: &mut AppRunner) {
     runner.input.raw.modifiers = modifiers;
 
     let mut propagate_event = false;
+
+    {
+        let hook = WINDOWEVENT_HOOK.read().unwrap();
+        if let Some(ref sender) = *hook {
+            log::trace!("Sending web_sys::KeyboardEvent to hook");
+            let web_event = WebKeyboardEvent {
+                event: event.key(),
+                pressed: false,
+            };
+            sender.send(web_event).unwrap();
+        }
+        else {
+            log::trace!("No window event hook installed");
+        }
+    }
 
     if let Some(key) = translate_key(&event.key()) {
         let egui_event = egui::Event::Key {
