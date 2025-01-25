@@ -181,7 +181,7 @@ pub(crate) fn on_keydown(event: web_sys::KeyboardEvent, runner: &mut AppRunner) 
         if let Some(ref sender) = *hook {
             log::trace!("Sending web_sys::KeyboardEvent to hook");
             let web_event = WebKeyboardEvent {
-                event: event.key(),
+                key: event.key(),
                 pressed: true,
             };
             sender.send(web_event).unwrap();
@@ -287,7 +287,7 @@ pub(crate) fn on_keyup(event: web_sys::KeyboardEvent, runner: &mut AppRunner) {
         if let Some(ref sender) = *hook {
             log::trace!("Sending web_sys::KeyboardEvent to hook");
             let web_event = WebKeyboardEvent {
-                event: event.key(),
+                key: event.key(),
                 pressed: false,
             };
             sender.send(web_event).unwrap();
