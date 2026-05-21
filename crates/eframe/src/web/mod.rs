@@ -20,6 +20,7 @@ pub mod screen_reader;
 pub mod storage;
 
 pub(crate) use app_runner::AppRunner;
+pub use events::install_keyboard_event_hook;
 pub use panic_handler::{PanicHandler, PanicSummary};
 pub use web_logger::WebLogger;
 pub use web_runner::WebRunner;

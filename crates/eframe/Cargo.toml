@@ -195,6 +195,7 @@ windows-sys = { workspace = true, features = [
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 bytemuck.workspace = true
+crossbeam-channel = "0.5"
 image = { workspace = true, features = ["png"] } # For copying images
 js-sys.workspace = true
 percent-encoding.workspace = true

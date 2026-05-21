@@ -1,4 +1,4 @@
-use crate::web::string_from_js_value;
+use crate::{WebKeyboardEvent, web::string_from_js_value};
 
 use super::{
     AppRunner, Closure, DEBUG_RESIZE, JsCast as _, JsValue, WebRunner, button_from_mouse_event,
@@ -9,6 +9,42 @@ use super::{
 
 use js_sys::Reflect;
 use web_sys::{Document, EventTarget, ShadowRoot};
+
+static WINDOWEVENT_HOOK: std::sync::RwLock<Option<crossbeam_channel::Sender<WebKeyboardEvent>>> =
+    std::sync::RwLock::new(None);
+
+/// Installs a hook that receives browser keyboard code events.
+pub fn install_keyboard_event_hook(sender: crossbeam_channel::Sender<WebKeyboardEvent>) {
+    let mut hook = WINDOWEVENT_HOOK.write().unwrap();
+    assert!(hook.is_none());
+    log::debug!("Installing web keyboard event hook...");
+    *hook = Some(sender);
+}
+
+fn handle_raw_keyboard_event(
+    event: &web_sys::KeyboardEvent,
+    runner: &AppRunner,
+    pressed: bool,
+    modifiers: egui::Modifiers,
+) {
+    let web_event = WebKeyboardEvent {
+        key: event.code(),
+        pressed,
+        modifiers,
+    };
+
+    if (runner.web_options.should_prevent_default_for_raw_key)(&web_event) {
+        event.prevent_default();
+    }
+
+    let hook = WINDOWEVENT_HOOK.read().unwrap();
+    if let Some(sender) = hook.as_ref() {
+        log::trace!("Sending web_sys::KeyboardEvent to hook");
+        sender.send(web_event).unwrap();
+    } else {
+        log::trace!("No window event hook installed");
+    }
+}
 
 // TODO(emilk): there are more calls to `prevent_default` and `stop_propagation`
 // than what is probably needed.
@@ -176,6 +212,8 @@ pub(crate) fn on_keydown(event: web_sys::KeyboardEvent, runner: &mut AppRunner) 
     }
 
     let modifiers = modifiers_from_kb_event(&event);
+    handle_raw_keyboard_event(&event, runner, true, modifiers);
+
     runner.input.raw.modifiers = modifiers;
 
     let key = event.key();
@@ -270,6 +308,8 @@ pub(crate) fn on_keyup(event: web_sys::KeyboardEvent, runner: &mut AppRunner) {
     runner.input.raw.modifiers = modifiers;
 
     let mut should_stop_propagation = true;
+
+    handle_raw_keyboard_event(&event, runner, false, modifiers);
 
     if let Some(key) = translate_key(&event.key()) {
         let egui_event = egui::Event::Key {
@@ -1114,14 +1154,14 @@ fn get_display_size(resize_observer_entries: &js_sys::Array) -> Result<(u32, u32
     } else if JsValue::from_str("contentBoxSize").js_in(entry.as_ref()) {
         let content_box_size = entry.content_box_size();
         let idx0 = content_box_size.at(0);
-        if idx0.is_undefined() {
-            // legacy
-            let size = JsValue::clone(content_box_size.as_ref());
-            let size: web_sys::ResizeObserverSize = size.dyn_into()?;
+        if !idx0.is_undefined() {
+            let size: web_sys::ResizeObserverSize = idx0.dyn_into()?;
             width = size.inline_size();
             height = size.block_size();
         } else {
-            let size: web_sys::ResizeObserverSize = idx0.dyn_into()?;
+            // legacy
+            let size = JsValue::clone(content_box_size.as_ref());
+            let size: web_sys::ResizeObserverSize = size.dyn_into()?;
             width = size.inline_size();
             height = size.block_size();
         }
