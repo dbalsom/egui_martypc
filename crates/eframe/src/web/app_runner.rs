@@ -308,6 +308,21 @@ impl AppRunner {
                         self.screenshot_commands_with_frame_delay
                             .push((user_data, 1));
                     }
+                    ViewportCommand::CursorGrab(grab) => match grab {
+                        egui::CursorGrab::None => {
+                            if let Some(document) =
+                                web_sys::window().and_then(|window| window.document())
+                            {
+                                document.exit_pointer_lock();
+                            }
+                        }
+                        egui::CursorGrab::Locked => {
+                            self.canvas().request_pointer_lock();
+                        }
+                        egui::CursorGrab::Confined => {
+                            log::warn!("Confined cursor grab is not supported by the web backend");
+                        }
+                    },
                     _ => {
                         // TODO(emilk): handle some of the commands
                         log::warn!(

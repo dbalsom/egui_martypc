@@ -128,6 +128,7 @@ pub(crate) fn install_event_handlers(runner_ref: &WebRunner) -> Result<(), JsVal
     install_mousemove(runner_ref, &document)?;
     install_pointerup(runner_ref, &document)?;
     install_pointerdown(runner_ref, &canvas)?;
+    install_pointer_lock_events(runner_ref, &document)?;
     install_mouseleave(runner_ref, &canvas)?;
 
     install_touchstart(runner_ref, &canvas)?;
@@ -664,6 +665,31 @@ fn is_interested_in_pointer_event(runner: &AppRunner, pos: egui::Pos2) -> bool {
     is_hovering_canvas || is_pointer_down
 }
 
+fn is_canvas_pointer_locked(runner: &AppRunner) -> bool {
+    web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.pointer_lock_element())
+        .is_some_and(|element| element.eq(runner.canvas()))
+}
+
+fn install_pointer_lock_events(runner_ref: &WebRunner, document: &Document) -> Result<(), JsValue> {
+    runner_ref.add_event_listener(
+        document,
+        "pointerlockchange",
+        |_: web_sys::Event, runner| {
+            log::debug!(
+                "Canvas pointer lock changed: {}",
+                is_canvas_pointer_locked(runner)
+            );
+            runner.needs_repaint.repaint_asap();
+        },
+    )?;
+    runner_ref.add_event_listener(document, "pointerlockerror", |_: web_sys::Event, runner| {
+        log::warn!("Browser rejected the canvas pointer-lock request");
+        runner.needs_repaint.repaint_asap();
+    })
+}
+
 fn install_mousemove(runner_ref: &WebRunner, target: &EventTarget) -> Result<(), JsValue> {
     runner_ref.add_event_listener(target, "mousemove", |event: web_sys::MouseEvent, runner| {
         let modifiers = modifiers_from_mouse_event(&event);
@@ -671,10 +697,23 @@ fn install_mousemove(runner_ref: &WebRunner, target: &EventTarget) -> Result<(),
 
         let pos = pos_from_mouse_event(runner.canvas(), &event, runner.egui_ctx());
 
-        if is_interested_in_pointer_event(
-            runner,
-            egui::pos2(event.client_x() as f32, event.client_y() as f32),
-        ) {
+        let pointer_locked = is_canvas_pointer_locked(runner);
+        if pointer_locked
+            || is_interested_in_pointer_event(
+                runner,
+                egui::pos2(event.client_x() as f32, event.client_y() as f32),
+            )
+        {
+            if pointer_locked {
+                runner
+                    .input
+                    .raw
+                    .events
+                    .push(egui::Event::MouseMoved(egui::vec2(
+                        event.movement_x() as f32,
+                        event.movement_y() as f32,
+                    )));
+            }
             let egui_event = egui::Event::PointerMoved(pos);
             let should_stop_propagation = (runner.web_options.should_stop_propagation)(&egui_event);
             let should_prevent_default = (runner.web_options.should_prevent_default)(&egui_event);
